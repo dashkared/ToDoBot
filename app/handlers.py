@@ -47,10 +47,6 @@ async def register_name(message: Message, state: FSMContext):
     await state.set_state(Register.number)
     await message.answer('Введите ваш номер телефона', reply_markup=kb.get_number)
 
-
-
-
-
 @router.message(Register.number, F.contact)
 async def register_number(message: Message, state: FSMContext):
     await state.update_data(number = message.contact.phone_number)
@@ -58,21 +54,10 @@ async def register_number(message: Message, state: FSMContext):
     await message.answer(f'Ваше имя: {data["name"]}\nВаш возраст: {data["age"]}\nНомер: {data["number"]}')
     await state.clear()
 
-
-
-
-
-
 @router.callback_query(F.data == 'my_task')
 async def task(callback: CallbackQuery):
     await callback.answer('Вы выбрали Мои задачи')
     await callback.message.edit_text('Выберите пункт меню', reply_markup= kb.my_task)
-
-
-
-
-
-
 
 @router.callback_query(F.data == 'back')
 async def return_back(callback: CallbackQuery):
