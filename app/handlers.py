@@ -67,3 +67,7 @@ async def task(callback: CallbackQuery):
 async def return_back(callback: CallbackQuery):
     await callback.message.edit_text('Выберите пункт меню', reply_markup=kb.inline_main)
 
+@router.callback_query(F.data == 'back')
+async def return_back(callback: CallbackQuery):
+    await callback.message.edit_text('Выберите пункт меню', reply_markup=kb.inline_main)
+
