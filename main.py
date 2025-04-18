@@ -8,8 +8,6 @@ from app.database.models import async_main
 
 
 
-
-
 # Функция запуска бота
 async def main():
     load_dotenv()
