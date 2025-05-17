@@ -8,10 +8,11 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 from app.database.requests import set_user, del_task, set_task
 from aiogram.enums import ChatAction
-from app.states import TaskActions
+from app.states import TaskActions, Gen
 from app.database.requests import update_task
 import app.keyboards as kb
 import app.database.requests as rq
+from app.generate import ai_generate
 
 router = Router()
 
@@ -84,6 +85,34 @@ async def task(callback: CallbackQuery):
 @router.callback_query(F.data == 'back')
 async def return_back(callback: CallbackQuery):
     await callback.message.edit_text('Выберите пункт меню', reply_markup=kb.inline_main)
+
+
+@router.callback_query(F.data == 'ai_req')
+async def ai_generating(callback: CallbackQuery, state: FSMContext):
+    await callback.message.edit_text(
+        'Напишите ваш запрос для нейросети:',
+        reply_markup=kb.ai_cancel
+    )
+    await state.set_state(Gen.wait)
+    await callback.answer()
+
+@router.message(Gen.wait)
+async def process_ai_request(message: Message, state: FSMContext):
+    await message.answer("⏳ Ваш запрос обрабатывается...")
+
+    try:
+        response = await ai_generate(message.text)
+        await message.answer(text=response,
+            reply_markup=kb.after_ai_response,
+            parse_mode='Markdown'
+        )
+    except Exception as e:
+        await message.answer(
+            f"⚠️ Произошла ошибка: {str(e)}",
+            reply_markup=kb.back_to_main
+        )
+
+    await state.clear()
 
 
 # Добавление задачи

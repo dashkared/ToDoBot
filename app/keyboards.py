@@ -7,7 +7,8 @@ from app.database.requests import get_tasks
 inline_main = InlineKeyboardMarkup(inline_keyboard=[
     [InlineKeyboardButton(text='Мои задачи', callback_data='my_task')],
     [InlineKeyboardButton(text='Контакты', callback_data='contact')],
-    [InlineKeyboardButton(text='Обратная связь', callback_data='feedback')]
+    [InlineKeyboardButton(text='Обратная связь', callback_data='feedback')],
+    [InlineKeyboardButton(text='Запрос нейросети', callback_data='ai_req')],
 ])
 
 my_task = InlineKeyboardMarkup(inline_keyboard=[
@@ -21,6 +22,31 @@ my_task = InlineKeyboardMarkup(inline_keyboard=[
 get_number = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text='Отправить номер',
                                                            request_contact=True)]],
                                  resize_keyboard=True)
+
+# Клавиатура для возврата в главное меню
+back_to_main = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="/start")],
+        [KeyboardButton(text="Мои задачи")]
+    ],
+    resize_keyboard=True
+)
+
+# Клавиатура для отмены запроса к нейросети
+ai_cancel = InlineKeyboardMarkup(
+    inline_keyboard=[
+        [InlineKeyboardButton(text='Отменить', callback_data='back')]
+    ]
+)
+
+# Клавиатура после ответа нейросети
+after_ai_response = ReplyKeyboardMarkup(
+    keyboard=[
+        [KeyboardButton(text="/start")],
+        [KeyboardButton(text="Мои задачи")]
+    ],
+    resize_keyboard=True
+)
 
 async def tasks(tg_id):
     tasks = await get_tasks(tg_id)
