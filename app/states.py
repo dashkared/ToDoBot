@@ -12,4 +12,7 @@ class TaskActions(StatesGroup):
     deleting = State()
     changing = State()
     new_text = State()
-
+    setting_reminder = State()
+    reminder_time = State()
+    ask_reminder = State()  # Новое состояние
+    

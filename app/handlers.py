@@ -1,18 +1,17 @@
 import asyncio
-import logging
 from aiogram import F, Router
-from aiogram.types import Message, CallbackQuery, reply_keyboard_remove
+from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command
-from aiogram.client.default import DefaultBotProperties
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
-from app.database.requests import set_user, del_task, set_task
+from app.database.requests import del_task, set_task
 from aiogram.enums import ChatAction
 from app.states import TaskActions, Gen
 from app.database.requests import update_task
 import app.keyboards as kb
 import app.database.requests as rq
 from app.generate import ai_generate
+from datetime import datetime
 
 router = Router()
 
@@ -21,7 +20,6 @@ class Register(StatesGroup):
     name = State()
     age = State()
     number = State()
-
 
 
 @router.message(Command("start"))
@@ -63,28 +61,43 @@ async def register_number(message: Message, state: FSMContext):
 @router.callback_query(F.data == 'my_task')
 async def task(callback: CallbackQuery):
     tasks = await rq.get_tasks(callback.from_user.id)
+    keyboard = await kb.my_task_kb(callback.from_user.id)  # Динамическая клавиатура
 
     if not tasks:
         await callback.message.edit_text(
             "📭 Список задач пуст",
-            reply_markup=kb.my_task
+            reply_markup=keyboard  # Только "Добавить" и "Назад"
         )
         return await callback.answer()
 
-    tasks_text = "📋 Ваши текущие задачи:\n\n" + "\n".join(
-        f"▫️ {task.task}" for task in tasks
-    )
-
+    # Если задачи есть, показываем их и кнопки
+    tasks_text = "📋 Ваши текущие задачи:\n\n" + "\n".join(f"▫️ {task.task}" for task in tasks)
     await callback.message.edit_text(
         f"{tasks_text}\n\nВыберите действие:",
-        reply_markup=kb.my_task
+        reply_markup=keyboard  # С кнопками "Удалить" и "Изменить"
     )
     await callback.answer()
 
 
 @router.callback_query(F.data == 'back')
-async def return_back(callback: CallbackQuery):
-    await callback.message.edit_text('Выберите пункт меню', reply_markup=kb.inline_main)
+async def return_back(callback: CallbackQuery, state: FSMContext):
+    current_state = await state.get_state()
+    
+    # Если мы в процессе добавления задачи
+    if current_state == TaskActions.adding:
+        await state.clear()
+        tasks = await rq.get_tasks(callback.from_user.id)
+        keyboard = await kb.my_task_kb(callback.from_user.id)
+        
+        text = "📭 Список задач пуст" if not tasks else "📋 Ваши текущие задачи:\n\n" + "\n".join(f"▫️ {task.task}" for task in tasks)
+        await callback.message.edit_text(
+            f"{text}\n\nВыберите действие:",
+            reply_markup=keyboard
+        )
+    else:
+        await callback.message.edit_text('Выберите пункт меню', reply_markup=kb.inline_main)
+    
+    await callback.answer()
 
 
 @router.callback_query(F.data == 'ai_req')
@@ -96,6 +109,7 @@ async def ai_generating(callback: CallbackQuery, state: FSMContext):
     await state.set_state(Gen.wait)
     await callback.answer()
 
+
 @router.message(Gen.wait)
 async def process_ai_request(message: Message, state: FSMContext):
     await message.answer("⏳ Ваш запрос обрабатывается...")
@@ -103,9 +117,9 @@ async def process_ai_request(message: Message, state: FSMContext):
     try:
         response = await ai_generate(message.text)
         await message.answer(text=response,
-            reply_markup=kb.after_ai_response,
-            parse_mode='Markdown'
-        )
+                             reply_markup=kb.after_ai_response,
+                             parse_mode='Markdown'
+                             )
     except Exception as e:
         await message.answer(
             f"⚠️ Произошла ошибка: {str(e)}",
@@ -113,21 +127,70 @@ async def process_ai_request(message: Message, state: FSMContext):
         )
 
     await state.clear()
+    
+    
+    
+@router.message(Command("del"))
+async def clear_data(message: Message):
+    # Удаляем все данные пользователя
+    success = await rq.delete_user_data(message.from_user.id)
+    
+    if success:
+        await message.answer("✅ Все ваши данные удалены!\nНажмите /start для нового использования")
+    else:
+        await message.answer("❌ У вас еще нет сохраненных данных")
 
 
+# Добавление задачи
 # Добавление задачи
 @router.callback_query(F.data == 'add')
 async def add_task(callback: CallbackQuery, state: FSMContext):
     await state.set_state(TaskActions.adding)
-    await callback.message.edit_text("Введите текст новой задачи:")
+    await callback.message.edit_text(
+        "Введите текст новой задачи:",
+        reply_markup=kb.back_button  # Используем существующую кнопку
+    )
     await callback.answer()
 
 
 @router.message(TaskActions.adding)
 async def task_added(message: Message, state: FSMContext):
-    await set_task(message.from_user.id, message.text)
-    await message.answer("Задача добавлена!", reply_markup=kb.inline_main)
+    # Пропускаем сообщения с кнопкой "Назад"
+    if message.text == "Назад": 
+        return
+    
+    # Сохраняем задачу и запоминаем её ID
+    task_id = await set_task(message.from_user.id, message.text)
+    await state.update_data(new_task_id=task_id)
+    
+    # Запрашиваем о напоминании
+    await message.answer(
+        "✅ Задача добавлена! Хотите установить напоминание?",
+        reply_markup=kb.confirm_reminder
+    )
+    await state.set_state(TaskActions.ask_reminder)
+    
+@router.callback_query(F.data == "remind_yes", TaskActions.ask_reminder)
+async def confirm_reminder(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    task_id = data.get('new_task_id')
+    
+    await state.update_data(task_id=task_id)
+    await state.set_state(TaskActions.reminder_time)
+    
+    await callback.message.edit_text(
+        "Введите дату и время в формате ДД.ММ.ГГГГ ЧЧ:ММ\nПример: 25.12.2023 15:30"
+    )
+    await callback.answer()
+
+@router.callback_query(F.data == "remind_no", TaskActions.ask_reminder)
+async def cancel_reminder(callback: CallbackQuery, state: FSMContext):
     await state.clear()
+    await callback.message.edit_text(
+        "✅ Задача сохранена без напоминания!",
+        reply_markup=kb.inline_main
+    )
+    await callback.answer()
 
 
 # Удаление задачи
@@ -143,7 +206,8 @@ async def delete_selected_task(callback: CallbackQuery):
     task_id = int(callback.data.split('_')[1])
     success = await del_task(task_id)
     if success:
-        await callback.message.edit_text("✅ Задача удалена!", reply_markup=kb.inline_main)
+        new_kb = await kb.my_task_kb(callback.from_user.id)
+        await callback.message.edit_text("✅ Задача удалена!", reply_markup=new_kb)
     else:
         await callback.message.edit_text("❌ Задача не найдена")
     await callback.answer()
@@ -162,18 +226,118 @@ async def select_task_to_edit(callback: CallbackQuery, state: FSMContext):
     task_id = int(callback.data.split('_')[1])
     await state.update_data(task_id=task_id)
     await state.set_state(TaskActions.new_text)
-    await callback.message.edit_text("Введите новый текст задачи:")
+    await callback.message.edit_text("Введите новый текст задачи:")  # Уберите лишние пробелы
     await callback.answer()
+
+
+@router.callback_query(F.data == 'contact')
+async def contact(callback: CallbackQuery):
+    await callback.message.edit_text('По всем вопросам обращайтесь к администраторам бота: '
+                                     '\n @sadmenus'
+                                     '\n @michaelj_ordan'
+                                     '\n @sziixubs'
+                                     '\n @just_m1chael'
+                                     '\n @me_ananasik', reply_markup=kb.back_button)
+
+
+@router.callback_query(F.data == 'feedback')
+async def feedback(callback: CallbackQuery):
+    await callback.message.edit_text('Если вам нетрудно, пройдите опрос, связанный с нашим ботом, '
+                                     'нам важно ваше мнение'
+                                     '\n https://forms.gle/gf5xcFqHR8kGkh9H7', reply_markup=kb.back_button)
 
 
 @router.message(TaskActions.new_text)
 async def save_updated_task(message: Message, state: FSMContext):
     data = await state.get_data()
-    success = await update_task(data['task_id'], message.text)
+    task_id = data.get('task_id')
+    new_text = message.text
+    if not task_id:
+        await message.answer("❌ Ошибка: задача не найдена")
+        await state.clear()
+        return
+
+    success = await update_task(task_id, new_text)
     if success:
-        await message.answer("✅ Задача изменена!", reply_markup=kb.inline_main)
+        new_kb = await kb.my_task_kb(message.from_user.id)
+        await message.answer("✅ Задача изменена!", reply_markup=new_kb)
     else:
         await message.answer("❌ Ошибка: задача не найдена")
     await state.clear()
 
 
+@router.callback_query(F.data == 'remind')
+async def remind_task_menu(callback: CallbackQuery):
+    tasks_markup = await kb.remind_tasks(callback.from_user.id)
+    await callback.message.edit_text("Выберите задачу для напоминания:", reply_markup=tasks_markup)
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith('remind_'))
+async def select_task_to_remind(callback: CallbackQuery, state: FSMContext):
+    task_id = int(callback.data.split('_')[1])
+    await state.update_data(task_id=task_id)
+    await state.set_state(TaskActions.reminder_time)
+    await callback.message.edit_text(
+        "Введите дату и время в формате ДД.ММ.ГГГГ ЧЧ:ММ\n"
+        "Пример: 25.12.2023 15:30"
+    )
+    await callback.answer()
+
+
+@router.message(TaskActions.reminder_time)
+async def save_reminder(message: Message, state: FSMContext):
+    '''try:
+        remind_time = datetime.strptime(message.text, "%d.%m.%Y %H:%M")
+    except ValueError:
+        await message.answer("❌ Неверный формат! Используйте ДД.ММ.ГГГГ ЧЧ:ММ")
+        return'''
+    if validate_date_time(str(message.text)):
+        try:
+            remind_time = datetime.strptime(message.text, "%d.%m.%Y %H:%M")
+        except ValueError:
+            await message.answer("❌ Неверный формат! Используйте ДД.ММ.ГГГГ ЧЧ:ММ")
+            return
+
+        data = await state.get_data()
+        task_id = data['task_id']
+
+        await rq.set_reminder(task_id, remind_time)
+        await message.answer(
+            f"⏰ Напоминание установлено на {remind_time.strftime('%d.%m.%Y %H:%M')}!",
+            reply_markup=kb.inline_main
+        )
+        await state.clear()
+    else:
+        await message.answer("❌ Неверный формат! Используйте ДД.ММ.ГГГГ ЧЧ:ММ")
+
+
+def validate_date_time(input_str):
+    try:
+        if len(input_str) != 16:
+            raise ValueError('введите полностью дату')
+
+        date_str, time_str = input_str.split()
+
+
+        input_date = datetime.strptime(date_str, "%d.%m.%Y")
+        input_time = datetime.strptime(time_str, "%H:%M").time()
+
+
+        current_date = datetime.now().date()
+        current_time = datetime.now().time()
+
+
+        if input_date.date() < current_date:
+            return False
+
+        if input_date.date() == current_date and input_time <= current_time:
+            return False
+
+        return True
+
+    except ValueError as e:
+        if "unconverted data remains" in str(e) or "does not match format" in str(e):
+            return False
+        else:
+            return
