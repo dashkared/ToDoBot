@@ -26,21 +26,57 @@ class Register(StatesGroup):
 async def start_cmd(message: Message):
     await message.bot.send_chat_action(chat_id=message.from_user.id, action=ChatAction.TYPING)
     await asyncio.sleep(1)
-    await rq.set_user(message.from_user.id)
-    await message.answer("Добро пожаловать в ToDo Bot!", reply_markup=kb.inline_main)
+    welcome_text = (
+        "👋 Добро пожаловать в ToDo Bot!\n\n"
+        "Я помогу вам управлять задачами и напоминаниями. Вот что я умею:\n"
+        "📋 Просматривать и добавлять задачи (/menu, /tasks)\n"
+        "❌ Удалять задачи\n"
+        "✏️ Изменять задачи\n"
+        "⏰ Устанавливать напоминания\n"
+        "🤖 Отвечать на запросы с помощью нейросети\n"
+        "📞 Регистрировать контактные данные (/register)\n"
+        "📢 Удалять все данные (/del)\n\n"
+        "Нажмите 'Главное меню' или используйте /menu, чтобы начать!"
+    )
+    await message.answer(welcome_text, reply_markup=kb.back_to_main)
+    await message.answer("Выберите пункт меню:", reply_markup=kb.inline_main)
+
+
+@router.message(Command("menu"))
+async def menu_cmd(message: Message):
+    await message.answer("Выберите пункт меню:", reply_markup=kb.inline_main)
+
+
+@router.message(Command("tasks"))
+async def tasks_cmd(message: Message):
+    tasks = await rq.get_tasks(message.from_user.id)
+    keyboard = await kb.my_task_kb(message.from_user.id)
+
+    if not tasks:
+        await message.answer(
+            "📭 Список задач пуст",
+            reply_markup=keyboard
+        )
+        return
+
+    tasks_text = "📋 Ваши текущие задачи:\n\n" + "\n".join(f"▫️ {task.task}" for task in tasks)
+    await message.answer(
+        f"{tasks_text}\n\nВыберите действие:",
+        reply_markup=keyboard
+    )
 
 
 @router.message(Command('register'))
 async def register(message: Message, state: FSMContext):
     await state.set_state(Register.name)
-    await message.answer('Введите ваше имя')
+    await message.answer('Введите ваше имя', reply_markup=kb.back_to_main)
 
 
 @router.message(Register.name)
 async def register_name(message: Message, state: FSMContext):
     await state.update_data(name=message.text)
     await state.set_state(Register.age)
-    await message.answer('Введите ваш возраст')
+    await message.answer('Введите ваш возраст', reply_markup=kb.back_to_main)
 
 
 @router.message(Register.age)
@@ -54,8 +90,28 @@ async def register_age(message: Message, state: FSMContext):
 async def register_number(message: Message, state: FSMContext):
     await state.update_data(number=message.contact.phone_number)
     data = await state.get_data()
-    await message.answer(f'Ваше имя: {data["name"]}\nВаш возраст: {data["age"]}\nНомер: {data["number"]}')
+    await message.answer(f'Ваше имя: {data["name"]}\nВаш возраст: {data["age"]}\nНомер: {data["number"]}',
+                         reply_markup=kb.back_to_main)
     await state.clear()
+
+
+@router.message(F.text == "Мои задачи")
+async def show_tasks(message: Message):
+    tasks = await rq.get_tasks(message.from_user.id)
+    keyboard = await kb.my_task_kb(message.from_user.id)
+
+    if not tasks:
+        await message.answer(
+            "📭 Список задач пуст",
+            reply_markup=keyboard
+        )
+        return
+
+    tasks_text = "📋 Ваши текущие задачи:\n\n" + "\n".join(f"▫️ {task.task}" for task in tasks)
+    await message.answer(
+        f"{tasks_text}\n\nВыберите действие:",
+        reply_markup=keyboard
+    )
 
 
 @router.callback_query(F.data == 'my_task')
@@ -82,7 +138,7 @@ async def task(callback: CallbackQuery):
 async def return_back(callback: CallbackQuery, state: FSMContext):
     current_state = await state.get_state()
 
-    if current_state == TaskActions.adding:
+    if current_state in [TaskActions.adding, TaskActions.reminder_time]:
         await state.clear()
         tasks = await rq.get_tasks(callback.from_user.id)
         keyboard = await kb.my_task_kb(callback.from_user.id)
@@ -99,6 +155,11 @@ async def return_back(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
+@router.message(F.text == "Главное меню")
+async def main_menu(message: Message):
+    await message.answer("Выберите пункт меню:", reply_markup=kb.inline_main)
+
+
 @router.callback_query(F.data == 'ai_req')
 async def ai_generating(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text(
@@ -111,7 +172,7 @@ async def ai_generating(callback: CallbackQuery, state: FSMContext):
 
 @router.message(Gen.wait)
 async def process_ai_request(message: Message, state: FSMContext):
-    await message.answer("⏳ Ваш запрос обрабатывается...")
+    await message.answer("⏳ Ваш запрос обрабатывается...", reply_markup=kb.back_to_main)
 
     try:
         response = await ai_generate(message.text)
@@ -133,13 +194,14 @@ async def clear_data(message: Message):
     success = await rq.delete_user_data(message.from_user.id)
 
     if success:
-        await message.answer("✅ Все ваши данные удалены!\nНажмите /start для нового использования")
+        await message.answer("✅ Все ваши данные удалены!\nНажмите /menu для нового использования",
+                             reply_markup=kb.back_to_main)
     else:
-        await message.answer("❌ У вас еще нет сохраненных данных")
+        await message.answer("❌ У вас еще нет сохраненных данных", reply_markup=kb.back_to_main)
 
 
 @router.callback_query(F.data == 'add')
-async def add_avg(callback: CallbackQuery, state: FSMContext):
+async def add_task(callback: CallbackQuery, state: FSMContext):
     await state.set_state(TaskActions.adding)
     await callback.message.edit_text(
         "Введите текст новой задачи:",
@@ -172,7 +234,8 @@ async def confirm_reminder(callback: CallbackQuery, state: FSMContext):
     await state.set_state(TaskActions.reminder_time)
 
     await callback.message.edit_text(
-        "Введите дату и время в формате ДД.ММ.ГГГГ ЧЧ:ММ\nПример: 25.12.2023 15:30"
+        "Введите дату и время в формате ДД.ММ.ГГГГ ЧЧ:ММ\nПример: 25.12.2023 15:30",
+        reply_markup=kb.back_button
     )
     await callback.answer()
 
@@ -187,7 +250,7 @@ async def cancel_reminder(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@router.callback_query(F.data.startswith('delete_'))
+@router.callback_query(F.data.regexp(r'^delete_(0|prev_\d+|next_\d+)$'))
 async def delete_task_menu(callback: CallbackQuery):
     if callback.data == 'delete_0':
         page = 0
@@ -204,8 +267,7 @@ async def delete_task_menu(callback: CallbackQuery):
     await callback.answer()
 
 
-@router.callback_query(
-    F.data.startswith('delete_') & ~F.data.startswith('delete_prev_') & ~F.data.startswith('delete_next_'))
+@router.callback_query(F.data.regexp(r'^delete_\d+$'))
 async def delete_selected_task(callback: CallbackQuery):
     task_id = int(callback.data.split('_')[1])
     success = await del_task(task_id)
@@ -217,7 +279,7 @@ async def delete_selected_task(callback: CallbackQuery):
     await callback.answer()
 
 
-@router.callback_query(F.data.startswith('change_'))
+@router.callback_query(F.data.regexp(r'^change_(0|prev_\d+|next_\d+)$'))
 async def change_task_menu(callback: CallbackQuery):
     if callback.data == 'change_0':
         page = 0
@@ -239,7 +301,7 @@ async def select_task_to_edit(callback: CallbackQuery, state: FSMContext):
     task_id = int(callback.data.split('_')[1])
     await state.update_data(task_id=task_id)
     await state.set_state(TaskActions.new_text)
-    await callback.message.edit_text("Введите новый текст задачи:")
+    await callback.message.edit_text("Введите новый текст задачи:", reply_markup=kb.back_button)
     await callback.answer()
 
 
@@ -266,7 +328,7 @@ async def save_updated_task(message: Message, state: FSMContext):
     task_id = data.get('task_id')
     new_text = message.text
     if not task_id:
-        await message.answer("❌ Ошибка: задача не найдена")
+        await message.answer("❌ Ошибка: задача не найдена", reply_markup=kb.back_to_main)
         await state.clear()
         return
 
@@ -275,11 +337,11 @@ async def save_updated_task(message: Message, state: FSMContext):
         new_kb = await kb.my_task_kb(message.from_user.id)
         await message.answer("✅ Задача изменена!", reply_markup=new_kb)
     else:
-        await message.answer("❌ Ошибка: задача не найдена")
+        await message.answer("❌ Ошибка: задача не найдена", reply_markup=kb.back_to_main)
     await state.clear()
 
 
-@router.callback_query(F.data.startswith('remind_'))
+@router.callback_query(F.data.regexp(r'^remind_(0|prev_\d+|next_\d+)$'))
 async def remind_task_menu(callback: CallbackQuery):
     if callback.data == 'remind_0':
         page = 0
@@ -296,26 +358,53 @@ async def remind_task_menu(callback: CallbackQuery):
     await callback.answer()
 
 
-@router.callback_query(
-    F.data.startswith('remind_') & ~F.data.startswith('remind_prev_') & ~F.data.startswith('remind_next_'))
+@router.callback_query(F.data.regexp(r'^remind_\d+$'))
 async def select_task_to_remind(callback: CallbackQuery, state: FSMContext):
     task_id = int(callback.data.split('_')[1])
     await state.update_data(task_id=task_id)
     await state.set_state(TaskActions.reminder_time)
     await callback.message.edit_text(
-        "Введите дату и время в формате ДД.ММ.ГГГГ ЧЧ:ММ\n"
-        "Пример: 25.12.2023 15:30"
+        "Введите дату и время в формате ДД.ММ.ГГГГ ЧЧ:ММ\nПример: 25.12.2023 15:30",
+        reply_markup=kb.back_button
     )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith('delete_after_reminder_') | F.data.startswith('keep_after_reminder_'))
+async def handle_reminder_action(callback: CallbackQuery):
+    action, task_id = callback.data.split('_')[0], int(callback.data.split('_')[3])
+
+    if action == 'delete':
+        success = await del_task(task_id)
+        if success:
+            await callback.message.edit_text("✅ Задача удалена!", reply_markup=kb.back_to_main)
+        else:
+            await callback.message.edit_text("❌ Задача не найдена", reply_markup=kb.back_to_main)
+    else:  # keep
+        await callback.message.edit_text("✅ Задача оставлена в списке.", reply_markup=kb.back_to_main)
+
     await callback.answer()
 
 
 @router.message(TaskActions.reminder_time)
 async def save_reminder(message: Message, state: FSMContext):
+    if message.text == "Назад":
+        await state.clear()
+        tasks = await rq.get_tasks(message.from_user.id)
+        keyboard = await kb.my_task_kb(message.from_user.id)
+        text = "📭 Список задач пуст" if not tasks else "📋 Ваши текущие задачи:\n\n" + "\n".join(
+            f"▫️ {task.task}" for task in tasks)
+        await message.answer(
+            f"{text}\n\nВыберите действие:",
+            reply_markup=keyboard
+        )
+        return
+
     if validate_date_time(str(message.text)):
         try:
             remind_time = datetime.strptime(message.text, "%d.%m.%Y %H:%M")
         except ValueError:
-            await message.answer("❌ Неверный формат! Используйте ДД.ММ.ГГГГ ЧЧ:ММ")
+            await message.answer("❌ Неверный формат! Используйте ДД.ММ.ГГГГ ЧЧ:ММ", reply_markup=kb.back_button)
             return
 
         data = await state.get_data()
@@ -328,7 +417,7 @@ async def save_reminder(message: Message, state: FSMContext):
         )
         await state.clear()
     else:
-        await message.answer("❌ Неверный формат! Используйте ДД.ММ.ГГГГ ЧЧ:ММ")
+        await message.answer("❌ Неверный формат! Используйте ДД.ММ.ГГГГ ЧЧ:ММ", reply_markup=kb.back_button)
 
 
 def validate_date_time(input_str):

@@ -12,15 +12,16 @@ inline_main = InlineKeyboardMarkup(inline_keyboard=[
 
 get_number = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text='Отправить номер',
                                                            request_contact=True)]],
-                                 resize_keyboard=True)
+                                 resize_keyboard=True,
+                                 persistent=True)
 
 # Клавиатура для возврата в главное меню
 back_to_main = ReplyKeyboardMarkup(
     keyboard=[
-        [KeyboardButton(text="/start")],
-        [KeyboardButton(text="Мои задачи")]
+        [KeyboardButton(text="Главное меню"), KeyboardButton(text="Мои задачи")]
     ],
-    resize_keyboard=True
+    resize_keyboard=True,
+    persistent=True
 )
 
 # Клавиатура для отмены запроса к нейросети
@@ -33,10 +34,10 @@ ai_cancel = InlineKeyboardMarkup(
 # Клавиатура после ответа нейросети
 after_ai_response = ReplyKeyboardMarkup(
     keyboard=[
-        [KeyboardButton(text="/start")],
-        [KeyboardButton(text="Мои задачи")]
+        [KeyboardButton(text="Главное меню"), KeyboardButton(text="Мои задачи")]
     ],
-    resize_keyboard=True
+    resize_keyboard=True,
+    persistent=True
 )
 
 back_button = InlineKeyboardMarkup(
@@ -149,7 +150,7 @@ async def remind_tasks(tg_id, page=0):
     # Add each task on its own row
     for task in paginated_tasks:
         keyboard.row(InlineKeyboardButton(
-            text=f"⏰ {task.task[:15]}...",
+            text=f"⏰ {task.task}",
             callback_data=f'remind_{task.id}'
         ))
 

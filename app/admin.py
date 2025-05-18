@@ -8,7 +8,7 @@ from app.database.requests import get_users
 admin = Router()
 ADMIN_IDS = [1896437987, 874577586, 850715316, 380854374]  # Проверьте ID!
 
-@admin.message(Command('new'), F.from_user.id.in_(ADMIN_IDS))
+@admin.message(Command('newsletter'), F.from_user.id.in_(ADMIN_IDS))
 async def newsletter(message: Message, state: FSMContext):
     await state.set_state(Newsletter.message)
     await message.answer('Введите сообщение для рассылки')
