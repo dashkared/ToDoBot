@@ -46,8 +46,6 @@ back_button = InlineKeyboardMarkup(
 )
 
 
-
-
 async def my_task_kb(tg_id):
     tasks = await get_tasks(tg_id)
     keyboard = InlineKeyboardBuilder()
@@ -56,9 +54,9 @@ async def my_task_kb(tg_id):
 
     if tasks:
         keyboard.row(
-            InlineKeyboardButton(text='Удалить', callback_data='delete'),
-            InlineKeyboardButton(text='Изменить', callback_data='change'),
-            InlineKeyboardButton(text='⏰ Напоминания', callback_data='remind'),
+            InlineKeyboardButton(text='Удалить', callback_data='delete_0'),
+            InlineKeyboardButton(text='Изменить', callback_data='change_0'),
+            InlineKeyboardButton(text='⏰ Напоминания', callback_data='remind_0'),
             width=2
         )
 
@@ -66,36 +64,111 @@ async def my_task_kb(tg_id):
     return keyboard.as_markup()
 
 
-async def delete_tasks(tg_id):
+TASKS_PER_PAGE = 5
+
+
+async def delete_tasks(tg_id, page=0):
     tasks = await get_tasks(tg_id)
     keyboard = InlineKeyboardBuilder()
-    for task in tasks:
-        keyboard.add(InlineKeyboardButton(
+
+    # Calculate the slice of tasks for the current page
+    start_idx = page * TASKS_PER_PAGE
+    end_idx = start_idx + TASKS_PER_PAGE
+    paginated_tasks = tasks[start_idx:end_idx]
+
+    # Add each task on its own row
+    for task in paginated_tasks:
+        keyboard.row(InlineKeyboardButton(
             text=f"❌ {task.task}",
             callback_data=f'delete_{task.id}'))
-    keyboard.row(InlineKeyboardButton(text="⬅️ Назад", callback_data="back"))  # Добавлено
+
+    # Calculate total pages
+    total_pages = (len(tasks) + TASKS_PER_PAGE - 1) // TASKS_PER_PAGE
+
+    # Add navigation buttons on the last row
+    keyboard.row(
+        InlineKeyboardButton(
+            text="⬅️",
+            callback_data=f"delete_prev_{page}"),
+        InlineKeyboardButton(
+            text=f"{page + 1}/{total_pages if total_pages > 0 else 1}",
+            callback_data="noop"),  # No-op button for display only
+        InlineKeyboardButton(
+            text="➡️",
+            callback_data=f"delete_next_{page}" if end_idx < len(tasks) else "noop")
+    )
+
+    keyboard.row(InlineKeyboardButton(text="⬅️ Назад", callback_data="back"))
     return keyboard.as_markup()
 
 
-async def edit_tasks(tg_id):
+async def edit_tasks(tg_id, page=0):
     tasks = await get_tasks(tg_id)
     keyboard = InlineKeyboardBuilder()
-    for task in tasks:
-        keyboard.add(InlineKeyboardButton(
+
+    # Calculate the slice of tasks for the current page
+    start_idx = page * TASKS_PER_PAGE
+    end_idx = start_idx + TASKS_PER_PAGE
+    paginated_tasks = tasks[start_idx:end_idx]
+
+    # Add each task on its own row
+    for task in paginated_tasks:
+        keyboard.row(InlineKeyboardButton(
             text=f"✏️ {task.task}",
             callback_data=f'edit_{task.id}'))
-    keyboard.row(InlineKeyboardButton(text="⬅️ Назад", callback_data="back"))  # Добавлено
+
+    # Calculate total pages
+    total_pages = (len(tasks) + TASKS_PER_PAGE - 1) // TASKS_PER_PAGE
+
+    # Add navigation buttons on the last row
+    keyboard.row(
+        InlineKeyboardButton(
+            text="⬅️",
+            callback_data=f"change_prev_{page}"),
+        InlineKeyboardButton(
+            text=f"{page + 1}/{total_pages if total_pages > 0 else 1}",
+            callback_data="noop"),
+        InlineKeyboardButton(
+            text="➡️",
+            callback_data=f"change_next_{page}" if end_idx < len(tasks) else "noop")
+    )
+
+    keyboard.row(InlineKeyboardButton(text="⬅️ Назад", callback_data="back"))
     return keyboard.as_markup()
 
 
-async def remind_tasks(tg_id):
+async def remind_tasks(tg_id, page=0):
     tasks = await get_tasks(tg_id)
     keyboard = InlineKeyboardBuilder()
-    for task in tasks:
-        keyboard.add(InlineKeyboardButton(
+
+    # Calculate the slice of tasks for the current page
+    start_idx = page * TASKS_PER_PAGE
+    end_idx = start_idx + TASKS_PER_PAGE
+    paginated_tasks = tasks[start_idx:end_idx]
+
+    # Add each task on its own row
+    for task in paginated_tasks:
+        keyboard.row(InlineKeyboardButton(
             text=f"⏰ {task.task[:15]}...",
             callback_data=f'remind_{task.id}'
         ))
+
+    # Calculate total pages
+    total_pages = (len(tasks) + TASKS_PER_PAGE - 1) // TASKS_PER_PAGE
+
+    # Add navigation buttons on the last row
+    keyboard.row(
+        InlineKeyboardButton(
+            text="⬅️",
+            callback_data=f"remind_prev_{page}"),
+        InlineKeyboardButton(
+            text=f"{page + 1}/{total_pages if total_pages > 0 else 1}",
+            callback_data="noop"),
+        InlineKeyboardButton(
+            text="➡️",
+            callback_data=f"remind_next_{page}" if end_idx < len(tasks) else "noop")
+    )
+
     keyboard.row(InlineKeyboardButton(text="⬅️ Назад", callback_data="back"))
     return keyboard.as_markup()
 
