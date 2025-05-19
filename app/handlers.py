@@ -4,7 +4,7 @@ from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
-from app.database.requests import del_task, set_task
+from app.database.requests import del_task, set_task, set_user
 from aiogram.enums import ChatAction
 from app.states import TaskActions, Gen
 from app.database.requests import update_task
@@ -22,6 +22,7 @@ class Register(StatesGroup):
 
 @router.message(Command("start"))
 async def start_cmd(message: Message):
+    await set_user(message.from_user.id)  # Ensure user is created in DB
     await message.bot.send_chat_action(chat_id=message.from_user.id, action=ChatAction.TYPING)
     await asyncio.sleep(1)
     welcome_text = (
@@ -354,11 +355,14 @@ async def handle_reminder_action(callback: CallbackQuery):
     if action == 'delete':
         success = await del_task(task_id)
         if success:
-            await callback.message.edit_text("✅ Задача удалена!", reply_markup=kb.back_to_main)
+            await callback.message.edit_text("✅ Задача удалена!", reply_markup=kb.back_button)
+            await callback.message.answer("Выберите действие:", reply_markup=kb.back_to_main)
         else:
-            await callback.message.edit_text("❌ Задача не найдена", reply_markup=kb.back_to_main)
+            await callback.message.edit_text("❌ Задача не найдена", reply_markup=kb.back_button)
+            await callback.message.answer("Выберите действие:", reply_markup=kb.back_to_main)
     else:  # keep
-        await callback.message.edit_text("✅ Задача оставлена в списке.", reply_markup=kb.back_to_main)
+        await callback.message.edit_text("✅ Задача оставлена в списке.", reply_markup=kb.back_button)
+        await callback.message.answer("Выберите действие:", reply_markup=kb.back_to_main)
 
     await callback.answer()
 
