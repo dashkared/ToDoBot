@@ -109,10 +109,6 @@ async def delete_user_data(tg_id):
         user = await session.scalar(select(User).where(User.tg_id == tg_id))
         if not user:
             return False
-        # Delete all tasks for the user (reminders are deleted via cascade)
-        await session.execute(
-            select(Task).where(Task.user == user.id)
-        )
         tasks = await session.scalars(
             select(Task).where(Task.user == user.id)
         )
@@ -123,27 +119,20 @@ async def delete_user_data(tg_id):
 
 async def deactivate_reminder_by_task(task_id):
     async with async_session() as session:
-        reminder = await session.scalar(
+        reminders = await session.scalars(
             select(Reminder)
             .where(Reminder.task_id == task_id, Reminder.is_active == True)
         )
-        if reminder:
+        for reminder in reminders:
             reminder.is_active = False
-            await session.commit()
-            return True
-        return False
+        await session.commit()
+        return bool(reminders.all())
 
-async def update_reminder_time(task_id, new_time):
+async def update_reminder_time(reminder_id, new_time):
     async with async_session() as session:
-        reminder = await session.scalar(
-            select(Reminder)
-            .where(Reminder.task_id == task_id)
-            .where(Reminder.is_active == True)
-        )
+        reminder = await session.get(Reminder, reminder_id)
         if reminder:
             reminder.remind_time = new_time
             await session.commit()
             return True
-        session.add(Reminder(task_id=task_id, remind_time=new_time))
-        await session.commit()
-        return True
+        return False

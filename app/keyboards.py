@@ -5,7 +5,7 @@ from app.database.requests import get_tasks
 
 inline_main = InlineKeyboardMarkup(inline_keyboard=[
     [InlineKeyboardButton(text='Мои задачи', callback_data='my_task')],
-    [InlineKeyboardButton(text='📅 Мои напоминания', callback_data='view_reminders')],
+    [InlineKeyboardButton(text='Мои напоминания', callback_data='view_reminders')],
     [InlineKeyboardButton(text='Контакты', callback_data='contact')],
     [InlineKeyboardButton(text='Обратная связь', callback_data='feedback')],
     [InlineKeyboardButton(text='Запрос нейросети', callback_data='ai_req')],
@@ -47,7 +47,6 @@ back_button = InlineKeyboardMarkup(
     ]
 )
 
-
 async def my_task_kb(tg_id):
     tasks = await get_tasks(tg_id)
     keyboard = InlineKeyboardBuilder()
@@ -63,9 +62,7 @@ async def my_task_kb(tg_id):
     keyboard.row(InlineKeyboardButton(text='Назад', callback_data='back'))
     return keyboard.as_markup()
 
-
 TASKS_PER_PAGE = 5
-
 
 async def delete_tasks(tg_id, page=0):
     tasks = await get_tasks(tg_id)
@@ -101,7 +98,6 @@ async def delete_tasks(tg_id, page=0):
     keyboard.row(InlineKeyboardButton(text="⬅️ Назад", callback_data="back"))
     return keyboard.as_markup()
 
-
 async def edit_tasks(tg_id, page=0):
     tasks = await get_tasks(tg_id)
     keyboard = InlineKeyboardBuilder()
@@ -136,21 +132,8 @@ async def edit_tasks(tg_id, page=0):
     keyboard.row(InlineKeyboardButton(text="⬅️ Назад", callback_data="back"))
     return keyboard.as_markup()
 
-
 async def remind_tasks(tg_id, page=0):
     tasks = await get_tasks(tg_id)
-    tasks_without_reminders = []
-    for task in tasks:
-        # Проверяем, есть ли у задачи активные напоминания
-        has_active_reminders = False
-        if task.reminders:  # Проверяем, есть ли вообще напоминания
-            for reminder in task.reminders:
-                if reminder.is_active:
-                    has_active_reminders = True
-                    break
-        if not has_active_reminders:
-            tasks_without_reminders.append(task)
-
     keyboard = InlineKeyboardBuilder()
 
     # Calculate the slice of tasks for the current page
@@ -160,11 +143,10 @@ async def remind_tasks(tg_id, page=0):
 
     # Add each task on its own row
     for task in paginated_tasks:
-        if task in tasks_without_reminders:
-            keyboard.row(InlineKeyboardButton(
-                text=f"⏰ {task.task}",
-                callback_data=f'remind_{task.id}'
-            ))
+        keyboard.row(InlineKeyboardButton(
+            text=f"⏰ {task.task}",
+            callback_data=f'remind_{task.id}'
+        ))
 
     # Calculate total pages
     total_pages = (len(tasks) + TASKS_PER_PAGE - 1) // TASKS_PER_PAGE
@@ -184,7 +166,6 @@ async def remind_tasks(tg_id, page=0):
     keyboard.row(InlineKeyboardButton(text="⬅️ Назад", callback_data="back"))
     return keyboard.as_markup()
 
-
 confirm_reminder = InlineKeyboardMarkup(
     inline_keyboard=[
         [
@@ -193,7 +174,6 @@ confirm_reminder = InlineKeyboardMarkup(
         ]
     ]
 )
-
 
 async def manage_reminders(tg_id, page=0):
     tasks = await get_tasks(tg_id)
@@ -207,21 +187,20 @@ async def manage_reminders(tg_id, page=0):
         )
         return keyboard.as_markup()
 
-    
-
     # Calculate the slice of tasks for the current page
     start_idx = page * TASKS_PER_PAGE
     end_idx = start_idx + TASKS_PER_PAGE
     paginated_tasks = tasks_with_reminders[start_idx:end_idx]
 
     for task in paginated_tasks:
-        reminder_time = task.reminders[0].remind_time.strftime("%d.%m.%Y %H:%M")
-        keyboard.row(
-            InlineKeyboardButton(
-                text=f"⏰ {task.task} ({reminder_time})",
-                callback_data=f"select_reminder_{task.id}"
+        for reminder in [r for r in task.reminders if r.is_active]:
+            reminder_time = reminder.remind_time.strftime("%d.%m.%Y %H:%M")
+            keyboard.row(
+                InlineKeyboardButton(
+                    text=f"⏰ {task.task} ({reminder_time})",
+                    callback_data=f"select_reminder_{task.id}_{reminder.id}"
+                )
             )
-        )
 
     # Calculate total pages
     total_pages = max(1, (len(tasks_with_reminders) + TASKS_PER_PAGE - 1) // TASKS_PER_PAGE)

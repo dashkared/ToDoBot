@@ -65,30 +65,6 @@ async def tasks_cmd(message: Message):
         reply_markup=keyboard
     )
 
-'''@router.message(Command('register'))
-async def register(message: Message, state: FSMContext):
-    await state.set_state(Register.name)
-    await message.answer('Введите ваше имя', reply_markup=kb.back_to_main)
-
-@router.message(Register.name)
-async def register_name(message: Message, state: FSMContext):
-    await state.update_data(name=message.text)
-    await state.set_state(Register.age)
-    await message.answer('Введите ваш возраст', reply_markup=kb.back_to_main)
-
-@router.message(Register.age)
-async def register_age(message: Message, state: FSMContext):
-    await state.update_data(age=message.text)
-    await state.set_state(Register.number)
-    await message.answer('Введите ваш номер телефона', reply_markup=kb.get_number)
-
-@router.message(Register.number, F.contact)
-async def register_number(message: Message, state: FSMContext):
-    await state.update_data(number=message.contact.phone_number)
-    data = await state.get_data()
-    await message.answer(f'Ваше имя: {data["name"]}\nВаш возраст: {data["age"]}\nНомер: {data["number"]}',
-                         reply_markup=kb.back_to_main)
-    await state.clear()'''
 
 @router.message(F.text == "Мои задачи")
 async def show_tasks(message: Message):
@@ -531,8 +507,8 @@ async def paginate_reminders(callback: CallbackQuery):
 
 @router.callback_query(F.data.startswith('remove_reminder_'))
 async def remove_reminder(callback: CallbackQuery):
-    task_id = int(callback.data.split('_')[2])
-    success = await rq.deactivate_reminder_by_task(task_id)
+    reminder_id = int(callback.data.split('_')[2])
+    success = await rq.deactivate_reminder(reminder_id)
 
     if success:
         keyboard = await kb.manage_reminders(callback.from_user.id)
@@ -545,18 +521,18 @@ async def remove_reminder(callback: CallbackQuery):
 @router.callback_query(F.data.startswith('edit_reminder_'))
 async def edit_reminder(callback: CallbackQuery, state: FSMContext):
     try:
-        task_id = int(callback.data.split('_')[-1])
+        reminder_id = int(callback.data.split('_')[-1])
+        task_id = int(callback.data.split('_')[-2])
         task = await get_task_by_id(task_id)
         if not task:
             await callback.message.edit_text("❌ Задача не найдена", reply_markup=kb.back_button)
             await callback.answer("Задача не найдена", show_alert=True)
             return
 
-        active_reminders = [r for r in task.reminders if r.is_active] if task.reminders else []
-
-        if not active_reminders:
+        reminder = next((r for r in task.reminders if r.id == reminder_id and r.is_active), None)
+        if not reminder:
             await callback.message.edit_text(
-                "❌ У этой задачи нет активных напоминаний. Хотите создать новое?",
+                "❌ Напоминание не найдено. Хотите создать новое?",
                 reply_markup=InlineKeyboardMarkup(
                     inline_keyboard=[
                         [InlineKeyboardButton(text="Создать напоминание", callback_data=f"remind_{task_id}")],
@@ -564,13 +540,13 @@ async def edit_reminder(callback: CallbackQuery, state: FSMContext):
                     ]
                 )
             )
-            await callback.answer("Нет активных напоминаний", show_alert=True)
+            await callback.answer("Напоминание не найдено", show_alert=True)
             return
 
-        await state.update_data(task_id=task_id)
+        await state.update_data(task_id=task_id, reminder_id=reminder_id)
         await state.set_state(TaskActions.edit_reminder)
 
-        current_time = active_reminders[0].remind_time.strftime("%d.%m.%Y %H:%M")
+        current_time = reminder.remind_time.strftime("%d.%m.%Y %H:%M")
         await callback.message.edit_text(
             f"✏️ Текущее время напоминания: {current_time}\n"
             "Введите новое время в формате ДД.ММ.ГГГГ ЧЧ:ММ (например, 25.12.2023 15:30):",
@@ -579,7 +555,7 @@ async def edit_reminder(callback: CallbackQuery, state: FSMContext):
         await callback.answer()
 
     except ValueError:
-        await callback.message.edit_text("❌ Ошибка: Неверный формат идентификатора задачи", reply_markup=kb.back_button)
+        await callback.message.edit_text("❌ Ошибка: Неверный формат идентификатора", reply_markup=kb.back_button)
         await callback.answer("Ошибка обработки запроса", show_alert=True)
     except Exception as e:
         await callback.message.edit_text("❌ Произошла ошибка при попытке редактирования", reply_markup=kb.back_button)
@@ -590,9 +566,10 @@ async def edit_reminder(callback: CallbackQuery, state: FSMContext):
 async def save_updated_reminder(message: Message, state: FSMContext):
     data = await state.get_data()
     task_id = data.get('task_id')
+    reminder_id = data.get('reminder_id')
 
-    if not task_id:
-        await message.answer("❌ Ошибка: задача не найдена", reply_markup=kb.back_to_main)
+    if not task_id or not reminder_id:
+        await message.answer("❌ Ошибка: задача или напоминание не найдены", reply_markup=kb.back_to_main)
         await state.clear()
         return
 
@@ -617,7 +594,7 @@ async def save_updated_reminder(message: Message, state: FSMContext):
             return
 
         new_time = datetime.strptime(message.text, "%d.%m.%Y %H:%M")
-        success = await rq.update_reminder_time(task_id, new_time)
+        success = await rq.update_reminder_time(reminder_id, new_time)
 
         if success:
             await message.answer(
@@ -625,9 +602,8 @@ async def save_updated_reminder(message: Message, state: FSMContext):
                 reply_markup=kb.inline_main
             )
         else:
-            await rq.set_reminder(task_id, new_time)
             await message.answer(
-                f"✅ Новое напоминание установлено на {new_time.strftime('%d.%m.%Y %H:%M')}!",
+                f"❌ Ошибка: напоминание не найдено",
                 reply_markup=kb.inline_main
             )
 
@@ -647,24 +623,29 @@ async def save_updated_reminder(message: Message, state: FSMContext):
 
 @router.callback_query(F.data.startswith('select_reminder_'))
 async def select_reminder(callback: CallbackQuery):
-    task_id = int(callback.data.split('_')[2])
+    task_id, reminder_id = map(int, callback.data.split('_')[2:4])
     task = await get_task_by_id(task_id)
-    if task and task.reminders and any(r.is_active for r in task.reminders):
-        reminder_time = task.reminders[0].remind_time.strftime("%d.%m.%Y %H:%M")
-        await callback.message.edit_text(
-            f"📅 Напоминание: {task.task}\nВремя: {reminder_time}",
-            reply_markup=InlineKeyboardMarkup(
-                inline_keyboard=[
-                    [
-                        InlineKeyboardButton(text="✏️ Изменить", callback_data=f"edit_reminder_{task_id}"),
-                        InlineKeyboardButton(text="❌ Удалить", callback_data=f"remove_reminder_{task_id}")
-                    ],
-                    [InlineKeyboardButton(text="⬅️ Назад", callback_data="view_reminders")]
-                ]
+    if task and task.reminders:
+        reminder = next((r for r in task.reminders if r.id == reminder_id and r.is_active), None)
+        if reminder:
+            reminder_time = reminder.remind_time.strftime("%d.%m.%Y %H:%M")
+            await callback.message.edit_text(
+                f"📅 Напоминание: {task.task}\nВремя: {reminder_time}",
+                reply_markup=InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [
+                            InlineKeyboardButton(text="✏️ Изменить",
+                                                 callback_data=f"edit_reminder_{task_id}_{reminder_id}"),
+                            InlineKeyboardButton(text="❌ Удалить", callback_data=f"remove_reminder_{reminder_id}")
+                        ],
+                        [InlineKeyboardButton(text="⬅️ Назад", callback_data="view_reminders")]
+                    ]
+                )
             )
-        )
+        else:
+            await callback.message.edit_text("❌ Напоминание не найдено", reply_markup=kb.back_button)
     else:
-        await callback.message.edit_text("❌ Напоминание не найдено", reply_markup=kb.back_button)
+        await callback.message.edit_text("❌ Задача или напоминание не найдены", reply_markup=kb.back_button)
     await callback.answer()
 
 
