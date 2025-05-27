@@ -12,7 +12,18 @@ async def check_reminders(bot):
             for reminder in reminders:
                 if reminder.remind_time <= now:
                     user_id = await get_user_by_task_id(reminder.task_id)
+                    if user_id is None:
+                        # User deleted, deactivate reminder and skip
+                        await deactivate_reminder(reminder.id)
+                        print(f"Deactivated reminder {reminder.id} for missing user")
+                        continue
+
                     task = await get_task_by_id(reminder.task_id)
+                    if not task:
+                        # Task deleted, deactivate reminder
+                        await deactivate_reminder(reminder.id)
+                        print(f"Deactivated reminder {reminder.id} for missing task")
+                        continue
 
                     # Send reminder message
                     await bot.send_message(
@@ -24,7 +35,7 @@ async def check_reminders(bot):
                     keyboard = InlineKeyboardMarkup(inline_keyboard=[
                         [
                             InlineKeyboardButton(
-                                text="Удалить",
+                                text="Удалить задачу",
                                 callback_data=f"delete_after_reminder_{task.id}"
                             ),
                             InlineKeyboardButton(
