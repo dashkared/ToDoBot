@@ -197,7 +197,7 @@ async def manage_reminders(tg_id, page=0):
             reminder_time = reminder.remind_time.strftime("%d.%m.%Y %H:%M")
             keyboard.row(
                 InlineKeyboardButton(
-                    text=f"⏰ {task.task} ({reminder_time})",
+                    text=f"⏰ ({reminder_time}) {task.task}",
                     callback_data=f"select_reminder_{task.id}_{reminder.id}"
                 )
             )
@@ -223,7 +223,7 @@ async def manage_reminders(tg_id, page=0):
         nav_buttons.append(InlineKeyboardButton(text="➡️", callback_data="noop"))  # Disabled button
 
     keyboard.row(*nav_buttons)
-    keyboard.row(InlineKeyboardButton(text="➕ Новое напоминание", callback_data="add_reminder"))
+    keyboard.row(InlineKeyboardButton(text="ㅤㅤ ㅤ               ➕ Новое напоминаниеㅤㅤ ㅤ               ", callback_data="add_reminder"))
     keyboard.row(InlineKeyboardButton(text="⬅️ Назад", callback_data="back"))
 
     return keyboard.as_markup()
