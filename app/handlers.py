@@ -143,11 +143,12 @@ async def ai_generating(callback: CallbackQuery, state: FSMContext):
 
 @router.message(Gen.wait)
 async def process_ai_request(message: Message, state: FSMContext):
-    await message.answer("⏳ Ваш запрос обрабатывается...", reply_markup=kb.back_to_main)
+    msg = await message.answer("⏳ Ваш запрос обрабатывается...", reply_markup=kb.back_to_main)
 
     try:
         response = await ai_generate(message.text)
-        await message.answer(text=response,
+        await msg.delete()
+        await message.answer(text=f'{response}',
                              reply_markup=kb.after_ai_response,
                              parse_mode='Markdown'
                              )
