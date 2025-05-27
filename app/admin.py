@@ -13,24 +13,6 @@ async def newsletter(message: Message, state: FSMContext):
     await state.set_state(Newsletter.message)
     await message.answer('Введите сообщение для рассылки')
 
-'''@admin.message(Newsletter.message, F.from_user.id.in_(ADMIN_IDS))
-async def newsletter_message(message: Message, state: FSMContext):
-    await state.clear()
-    await message.answer('Рассылка началась...')
-    
-    users = await get_users()
-    successful = 0
-    
-    for user in users:
-        try:
-            await message.copy_to(chat_id=user.tg_id)  # Используем tg_id
-            successful += 1
-        except Exception as e:
-            print(f"Ошибка: {e}")
-    
-    await message.answer(f"Отправлено: {successful} пользователям")'''
-
-
 @admin.message(Newsletter.message, F.from_user.id.in_(ADMIN_IDS))
 async def newsletter_message(message: Message, state: FSMContext):
     await state.clear()

@@ -20,20 +20,26 @@ class User(Base):
     tg_id = mapped_column(BigInteger)
 
 
+from sqlalchemy.orm import relationship, Mapped, mapped_column
+
 class Task(Base):
     __tablename__ = 'tasks'
 
     id: Mapped[int] = mapped_column(primary_key=True)
     task: Mapped[str] = mapped_column(String(100))
-    user: Mapped[int] = mapped_column(ForeignKey('users.id', ondelete='CASCADE'))  # Добавлено
+    user: Mapped[int] = mapped_column(ForeignKey('users.id', ondelete='CASCADE'))
+    # Добавляем связь с Reminder
+    reminders = relationship("Reminder", back_populates="task", cascade="all, delete-orphan")
 
 class Reminder(Base):
     __tablename__ = 'reminders'
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    task_id: Mapped[int] = mapped_column(ForeignKey('tasks.id', ondelete='CASCADE'))  # Добавлено
+    task_id: Mapped[int] = mapped_column(ForeignKey('tasks.id', ondelete='CASCADE'))
     remind_time: Mapped[datetime] = mapped_column(DateTime)
     is_active: Mapped[bool] = mapped_column(default=True)
+    # Добавляем обратную связь
+    task = relationship("Task", back_populates="reminders")
 
 
 async def async_main():

@@ -15,4 +15,4 @@ class TaskActions(StatesGroup):
     setting_reminder = State()
     reminder_time = State()
     ask_reminder = State()  # Новое состояние
-    
+    edit_reminder = State()

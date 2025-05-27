@@ -3,6 +3,7 @@ from app.database.models import User, Task
 import datetime
 from app.database.models import Reminder
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 async def set_user(tg_id):
     async with async_session() as session:
@@ -28,7 +29,10 @@ async def get_tasks(tg_id):
         if not user:
             return []
         await session.refresh(user)
-        tasks = await session.scalars(select(Task).where(Task.user == user.id))
+        tasks = await session.scalars(
+            select(Task)
+            .where(Task.user == user.id)
+            .options(selectinload(Task.reminders)))  # Подгружаем напоминания
         return tasks.all()
 
 async def set_task(tg_id, task):
@@ -94,7 +98,11 @@ async def deactivate_reminder(reminder_id):
 
 async def get_task_by_id(task_id):
     async with async_session() as session:
-        task = await session.get(Task, task_id)
+        task = await session.scalar(
+            select(Task)
+            .where(Task.id == task_id)
+            .options(selectinload(Task.reminders))
+        )
         return task
 
 async def delete_user_data(tg_id):
@@ -103,5 +111,32 @@ async def delete_user_data(tg_id):
         if not user:
             return False
         await session.delete(user)
+        await session.commit()
+        return True
+
+async def deactivate_reminder_by_task(task_id):
+    async with async_session() as session:
+        reminder = await session.scalar(
+            select(Reminder)
+            .where(Reminder.task_id == task_id, Reminder.is_active == True)
+        )
+        if reminder:
+            reminder.is_active = False
+            await session.commit()
+            return True
+        return False
+
+async def update_reminder_time(task_id, new_time):
+    async with async_session() as session:
+        reminder = await session.scalar(
+            select(Reminder)
+            .where(Reminder.task_id == task_id)
+            .where(Reminder.is_active == True)
+        )
+        if reminder:
+            reminder.remind_time = new_time
+            await session.commit()
+            return True
+        session.add(Reminder(task_id=task_id, remind_time=new_time))
         await session.commit()
         return True
