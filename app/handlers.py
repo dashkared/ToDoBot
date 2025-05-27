@@ -11,7 +11,7 @@ from app.database.requests import update_task, get_task_by_id
 import app.keyboards as kb
 import app.database.requests as rq
 from app.generate import ai_generate
-from datetime import datetime
+from datetime import datetime, timedelta
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 router = Router()
@@ -391,9 +391,64 @@ async def select_task_to_remind(callback: CallbackQuery, state: FSMContext):
     await state.update_data(task_id=task_id)
     await state.set_state(TaskActions.reminder_time)
     await callback.message.edit_text(
-        "Введите дату и время в формате ДД.ММ.ГГГГ ЧЧ:ММ\nПример: 28.05.2025 15:30",
-        reply_markup=kb.back_button
+        "Выберите время напоминания или введите дату и время в формате ДД.ММ.ГГГГ ЧЧ:ММ (например, 28.05.2025 15:30):",
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(text="через 1 час", callback_data="remind_in_1h"),
+                    InlineKeyboardButton(text="через 3 часа", callback_data="remind_in_3h")
+                ],
+                [
+                    InlineKeyboardButton(text="через 12 часов", callback_data="remind_in_12h"),
+                    InlineKeyboardButton(text="через 24 часа", callback_data="remind_in_24h")
+                ],
+                [
+                    InlineKeyboardButton(text="через неделю (7 дней)", callback_data="remind_in_7d"),
+                    InlineKeyboardButton(text="через месяц (30 дней)", callback_data="remind_in_30d")
+                ],
+                [InlineKeyboardButton(text="Назад", callback_data="back")]
+            ]
+        )
     )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith('remind_in_'))
+async def quick_set_reminder(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    task_id = data.get('task_id')
+    if not task_id:
+        await callback.message.edit_text("❌ Ошибка: задача не найдена", reply_markup=kb.back_button)
+        await state.clear()
+        await callback.answer()
+        return
+
+    interval = callback.data.split('_')[-1]
+    current_time = datetime.now()
+    if interval == "1h":
+        remind_time = current_time + timedelta(hours=1)
+    elif interval == "3h":
+        remind_time = current_time + timedelta(hours=3)
+    elif interval == "12h":
+        remind_time = current_time + timedelta(hours=12)
+    elif interval == "24h":
+        remind_time = current_time + timedelta(hours=24)
+    elif interval == "7d":
+        remind_time = current_time + timedelta(days=7)
+    elif interval == "30d":
+        remind_time = current_time + timedelta(days=30)
+    else:
+        await callback.message.edit_text("❌ Неверный интервал", reply_markup=kb.back_button)
+        await state.clear()
+        await callback.answer()
+        return
+
+    await rq.set_reminder(task_id, remind_time)
+    await callback.message.edit_text(
+        f"⏰ Напоминание установлено на {remind_time.strftime('%d.%m.%Y %H:%M')}!",
+        reply_markup=kb.inline_main
+    )
+    await state.clear()
     await callback.answer()
 
 
@@ -434,8 +489,7 @@ async def save_reminder(message: Message, state: FSMContext):
         try:
             remind_time = datetime.strptime(message.text, "%d.%m.%Y %H:%M")
         except ValueError:
-            await message.answer("❌ Неверный формат! Используйте ДД.ММ.ГГГГ ЧЧ:ММ, например, 28.05.2025 15:30",
-                                 reply_markup=kb.back_button)
+            await message.answer("❌ Неверный формат! Используйте ДД.ММ.ГГГГ ЧЧ:ММ, например, 28.05.2025 15:30", reply_markup=kb.back_button)
             return
 
         data = await state.get_data()
@@ -665,3 +719,4 @@ async def add_reminder(callback: CallbackQuery, state: FSMContext):
         reply_markup=await kb.remind_tasks(callback.from_user.id, page=0)
     )
     await callback.answer()
+
