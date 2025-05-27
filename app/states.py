@@ -1,6 +1,5 @@
 from aiogram.fsm.state import StatesGroup, State
 
-
 class Newsletter(StatesGroup):
     message = State()
 
@@ -14,5 +13,5 @@ class TaskActions(StatesGroup):
     new_text = State()
     setting_reminder = State()
     reminder_time = State()
-    ask_reminder = State()  # Новое состояние
+    ask_reminder = State()
     edit_reminder = State()

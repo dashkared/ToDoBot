@@ -1,7 +1,5 @@
 from app.database.models import async_session
-from app.database.models import User, Task
-import datetime
-from app.database.models import Reminder
+from app.database.models import User, Task, Reminder
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
@@ -32,14 +30,13 @@ async def get_tasks(tg_id):
         tasks = await session.scalars(
             select(Task)
             .where(Task.user == user.id)
-            .options(selectinload(Task.reminders)))  # Подгружаем напоминания
+            .options(selectinload(Task.reminders)))
         return tasks.all()
 
 async def set_task(tg_id, task):
     async with async_session() as session:
         user = await session.scalar(select(User).where(User.tg_id == tg_id))
         if not user:
-            # Create user if not found
             session.add(User(tg_id=tg_id))
             await session.commit()
             user = await session.scalar(select(User).where(User.tg_id == tg_id))
@@ -70,7 +67,7 @@ async def update_task(task_id, new_text):
             return True
         return False
 
-async def set_reminder(task_id, remind_time: datetime):
+async def set_reminder(task_id, remind_time):
     async with async_session() as session:
         session.add(Reminder(task_id=task_id, remind_time=remind_time))
         await session.commit()
@@ -78,8 +75,10 @@ async def set_reminder(task_id, remind_time: datetime):
 async def get_user_by_task_id(task_id):
     async with async_session() as session:
         task = await session.get(Task, task_id)
+        if not task:
+            return None
         user = await session.get(User, task.user)
-        return user.tg_id
+        return user.tg_id if user else None
 
 async def get_active_reminders():
     async with async_session() as session:
@@ -110,7 +109,15 @@ async def delete_user_data(tg_id):
         user = await session.scalar(select(User).where(User.tg_id == tg_id))
         if not user:
             return False
-        await session.delete(user)
+        # Delete all tasks for the user (reminders are deleted via cascade)
+        await session.execute(
+            select(Task).where(Task.user == user.id)
+        )
+        tasks = await session.scalars(
+            select(Task).where(Task.user == user.id)
+        )
+        for task in tasks:
+            await session.delete(task)
         await session.commit()
         return True
 

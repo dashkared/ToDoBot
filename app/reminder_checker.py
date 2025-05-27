@@ -13,9 +13,9 @@ async def check_reminders(bot):
                 if reminder.remind_time <= now:
                     user_id = await get_user_by_task_id(reminder.task_id)
                     if user_id is None:
-                        # User deleted, deactivate reminder and skip
+                        # User or task not found, deactivate reminder and skip
                         await deactivate_reminder(reminder.id)
-                        print(f"Deactivated reminder {reminder.id} for missing user")
+                        print(f"Deactivated reminder {reminder.id} for missing user or task")
                         continue
 
                     task = await get_task_by_id(reminder.task_id)
