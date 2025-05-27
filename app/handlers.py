@@ -109,7 +109,10 @@ async def task(callback: CallbackQuery):
 async def return_back(callback: CallbackQuery, state: FSMContext):
     current_state = await state.get_state()
 
-    if current_state in [TaskActions.adding, TaskActions.reminder_time, TaskActions.edit_reminder]:
+    if current_state == Gen.wait:
+        await state.clear()
+        await callback.message.edit_text('Выберите пункт меню', reply_markup=kb.inline_main)
+    elif current_state in [TaskActions.adding, TaskActions.reminder_time, TaskActions.edit_reminder, Gen.conversation]:
         await state.clear()
         tasks = await rq.get_tasks(callback.from_user.id)
         keyboard = await kb.my_task_kb(callback.from_user.id)
@@ -138,27 +141,90 @@ async def ai_generating(callback: CallbackQuery, state: FSMContext):
         reply_markup=kb.ai_cancel
     )
     await state.set_state(Gen.wait)
+    await state.update_data(conversation_history=[])  # Initialize empty conversation history
     await callback.answer()
 
 
 @router.message(Gen.wait)
 async def process_ai_request(message: Message, state: FSMContext):
-    msg = await message.answer("⏳ Ваш запрос обрабатывается...", reply_markup=kb.back_to_main)
+    msg = await message.answer("⏳ Ваш запрос обрабатывается...", reply_markup=kb.ai_conversation)
 
     try:
-        response = await ai_generate(message.text)
+        data = await state.get_data()
+        conversation_history = data.get('conversation_history', [])
+        # Append user message to conversation history
+        conversation_history.append({"role": "user", "content": message.text})
+
+        response = await ai_generate(conversation_history)
+        # Append AI response to conversation history
+        conversation_history.append({"role": "assistant", "content": response})
+        await state.update_data(conversation_history=conversation_history)
+
         await msg.delete()
-        await message.answer(text=f'{response}',
-                             reply_markup=kb.after_ai_response,
-                             parse_mode='Markdown'
-                             )
+        await message.answer(
+            text=f'{response}',
+            reply_markup=kb.ai_conversation,
+            parse_mode='Markdown'
+        )
+        await state.set_state(Gen.conversation)  # Transition to conversation state
     except Exception as e:
         await message.answer(
             f"⚠️ Произошла ошибка: {str(e)}",
             reply_markup=kb.back_to_main
         )
+        await state.clear()
 
-    await state.clear()
+
+@router.message(Gen.conversation)
+async def continue_ai_conversation(message: Message, state: FSMContext):
+    if message.text == "Новый чат":
+        await state.update_data(conversation_history=[])  # Reset conversation history
+        await message.answer(
+            "✅ Новый чат начат. Напишите ваш запрос:",
+            reply_markup=kb.ai_conversation
+        )
+        await state.set_state(Gen.wait)
+        return
+
+    if message.text in ["Главное меню", "Мои задачи"]:
+        await state.clear()
+        if message.text == "Главное меню":
+            await message.answer("Выберите пункт меню:", reply_markup=kb.inline_main)
+        else:
+            tasks = await rq.get_tasks(message.from_user.id)
+            keyboard = await kb.my_task_kb(message.from_user.id)
+            text = "📭 Список задач пуст" if not tasks else "📋 Ваши текущие задачи:\n\n" + "\n".join(
+                f"▫️ {task.task}" for task in tasks)
+            await message.answer(
+                f"{text}\n\nВыберите действие:",
+                reply_markup=keyboard
+            )
+        return
+
+    msg = await message.answer("⏳ Ваш запрос обрабатывается...", reply_markup=kb.ai_conversation)
+
+    try:
+        data = await state.get_data()
+        conversation_history = data.get('conversation_history', [])
+        # Append user message to conversation history
+        conversation_history.append({"role": "user", "content": message.text})
+
+        response = await ai_generate(conversation_history)
+        # Append AI response to conversation history
+        conversation_history.append({"role": "assistant", "content": response})
+        await state.update_data(conversation_history=conversation_history)
+
+        await msg.delete()
+        await message.answer(
+            text=f'{response}',
+            reply_markup=kb.ai_conversation,
+            parse_mode='Markdown'
+        )
+    except Exception as e:
+        await message.answer(
+            f"⚠️ Произошла ошибка: {str(e)}",
+            reply_markup=kb.ai_conversation
+        )
 
 
 @router.message(Command("del"))
@@ -238,7 +304,14 @@ async def task_added(message: Message, state: FSMContext):
         await state.update_data(new_task_id=task_id)
         await message.answer(
             "✅ Задача добавлена! Хотите установить напоминание?",
-            reply_markup=kb.confirm_reminder
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(text="Да", callback_data="remind_yes"),
+                        InlineKeyboardButton(text="Нет", callback_data="remind_no")
+                    ]
+                ]
+            )
         )
         await state.set_state(TaskActions.ask_reminder)
     except Exception as e:
@@ -258,8 +331,24 @@ async def confirm_reminder(callback: CallbackQuery, state: FSMContext):
     await state.set_state(TaskActions.reminder_time)
 
     await callback.message.edit_text(
-        "Введите дату и время в формате ДД.ММ.ГГГГ ЧЧ:ММ\nПример: 28.05.2025 15:30",
-        reply_markup=kb.back_button
+        "Выберите время напоминания или введите дату и время в формате ДД.ММ.ГГГГ ЧЧ:ММ (например, 28.05.2025 15:30):",
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(text="через 1 час", callback_data="remind_in_1h"),
+                    InlineKeyboardButton(text="через 3 часа", callback_data="remind_in_3h")
+                ],
+                [
+                    InlineKeyboardButton(text="через 12 часов", callback_data="remind_in_12h"),
+                    InlineKeyboardButton(text="через 24 часа", callback_data="remind_in_24h")
+                ],
+                [
+                    InlineKeyboardButton(text="через неделю (7 дней)", callback_data="remind_in_7d"),
+                    InlineKeyboardButton(text="через месяц (30 дней)", callback_data="remind_in_30d")
+                ],
+                [InlineKeyboardButton(text="Назад", callback_data="back")]
+            ]
+        )
     )
     await callback.answer()
 
@@ -490,7 +579,8 @@ async def save_reminder(message: Message, state: FSMContext):
         try:
             remind_time = datetime.strptime(message.text, "%d.%m.%Y %H:%M")
         except ValueError:
-            await message.answer("❌ Неверный формат! Используйте ДД.ММ.ГГГГ ЧЧ:ММ, например, 28.05.2025 15:30", reply_markup=kb.back_button)
+            await message.answer("❌ Неверный формат! Используйте ДД.ММ.ГГГГ ЧЧ:ММ, например, 28.05.2025 15:30",
+                                 reply_markup=kb.back_button)
             return
 
         data = await state.get_data()
@@ -720,4 +810,3 @@ async def add_reminder(callback: CallbackQuery, state: FSMContext):
         reply_markup=await kb.remind_tasks(callback.from_user.id, page=0)
     )
     await callback.answer()
-

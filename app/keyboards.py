@@ -32,10 +32,11 @@ ai_cancel = InlineKeyboardMarkup(
     ]
 )
 
-# Клавиатура после ответа нейросети
-after_ai_response = ReplyKeyboardMarkup(
+# Клавиатура для разговора с нейросетью
+ai_conversation = ReplyKeyboardMarkup(
     keyboard=[
-        [KeyboardButton(text="Главное меню"), KeyboardButton(text="Мои задачи")]
+        [KeyboardButton(text="Главное меню"), KeyboardButton(text="Мои задачи")],
+        [KeyboardButton(text="Новый чат")]
     ],
     resize_keyboard=True,
     persistent=True
@@ -165,15 +166,6 @@ async def remind_tasks(tg_id, page=0):
     )
     keyboard.row(InlineKeyboardButton(text="⬅️ Назад", callback_data="back"))
     return keyboard.as_markup()
-
-confirm_reminder = InlineKeyboardMarkup(
-    inline_keyboard=[
-        [
-            InlineKeyboardButton(text="Да", callback_data="remind_yes"),
-            InlineKeyboardButton(text="Нет", callback_data="remind_no")
-        ]
-    ]
-)
 
 async def manage_reminders(tg_id, page=0):
     tasks = await get_tasks(tg_id)

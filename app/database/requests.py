@@ -1,5 +1,4 @@
-from app.database.models import async_session
-from app.database.models import User, Task, Reminder
+from app.database.models import async_session, User, Task, Reminder
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 

@@ -5,6 +5,7 @@ class Newsletter(StatesGroup):
 
 class Gen(StatesGroup):
     wait = State()
+    conversation = State()
 
 class TaskActions(StatesGroup):
     adding = State()
