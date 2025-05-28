@@ -1,12 +1,13 @@
 from openai import AsyncOpenAI, AsyncClient
 import os
 from dotenv import load_dotenv
-load_dotenv()
+
+load_dotenv() # Загрузка переменных окружения из файла .env
 
 client = AsyncClient(
     base_url="https://openrouter.ai/api/v1",
     api_key=os.getenv('OPENAI_API'),
-)
+) # Создание асинхронного клиента для работы с OpenRouter API с базовым URL и API-ключом из переменной окружения
 
 SYSTEM_PROMPT = """
 Вы являетесь ИИ-ассистентом по имени 'Ассистент Тудушка', созданным для помощи пользователям в планировании времени, управлении задачами и связанными с этим вопросами. Ваша основная цель - помогать пользователям эффективно организовывать свое время, управлять задачами, учебой, работой, бизнесом и отдыхом. Вы можете давать советы по тайм-менеджменту, помогать разбивать крупные задачи на более мелкие шаги, предлагать конкретные действия для выполнения задач и отвечать на вопросы в рамках указанной тематики.
@@ -45,17 +46,17 @@ SYSTEM_PROMPT = """
 """
 
 async def ai_generate(messages: list):
-    # Prepend the system prompt to the messages
+    # Добавление промпта в качестве дополнения к сообщениям
     full_messages = [
         {"role": "system", "content": SYSTEM_PROMPT}
-    ] + messages
+    ] + messages # Формирование полного списка сообщений, добавляя системный промпт перед пользовательскими сообщениями
 
     completion = await client.chat.completions.create(
         model="deepseek/deepseek-chat-v3-0324:free",
         messages=full_messages,
         max_tokens=4096,
-    )
-    response = completion.choices[0].message.content
-    return response
+    ) # Вызов OpenRouter API для генерации ответа с использованием модели DeepSeek, с ограничением в 4096 токенов
 
+    response = completion.choices[0].message.content # Извлечение текста ответа из результата API
 
+    return response # Возврат сгенерированного ответа
