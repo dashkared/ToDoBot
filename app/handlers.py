@@ -1,6 +1,5 @@
-import asyncio
 from aiogram import F, Router
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message, CallbackQuery, ReplyKeyboardRemove
 from aiogram.filters import Command
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
@@ -136,8 +135,16 @@ async def main_menu(message: Message):
 
 @router.callback_query(F.data == 'ai_req')
 async def ai_generating(callback: CallbackQuery, state: FSMContext):
+    welcome_message = (
+        "👋 Привет! Я 'Ассистент Тудушка', ваш ИИ-помощник по планированию времени и управлению задачами. Я могу помочь вам с: \n\n"
+        "- Советы по тайм-менеджменту и продуктивности. \n"
+        "- Разбиение больших задач на более мелкие шаги. \n"
+        "- Планирование вашего дня, недели или месяца. \n"
+        "- Использование функций бота для управления вашими задачами и напоминаниями. \n"
+        "Просто напишите свой вопрос или запрос, и я сделаю все возможное, чтобы помочь вам! Если вы хотите начать новый разговор, нажмите 'Новый чат'."
+    )
     await callback.message.edit_text(
-        'Напишите запрос для нейросети:',
+        welcome_message,
         reply_markup=kb.ai_cancel
     )
     await state.set_state(Gen.wait)
@@ -178,7 +185,7 @@ async def process_ai_request(message: Message, state: FSMContext):
 @router.message(Gen.conversation)
 async def continue_ai_conversation(message: Message, state: FSMContext):
     if message.text == "Новый чат":
-        await state.update_data(conversation_history=[])  # Reset conversation history
+        await state.update_data(conversation_history=[])  # Сброс истории разговора
         await message.answer(
             "✅ Новый чат начат. Напишите ваш запрос:",
             reply_markup=kb.ai_conversation
@@ -188,6 +195,9 @@ async def continue_ai_conversation(message: Message, state: FSMContext):
 
     if message.text in ["Главное меню", "Мои задачи"]:
         await state.clear()
+        # Удаляем reply-клавиатуру
+        temp_msg = await message.answer("Переход...", reply_markup=ReplyKeyboardRemove())
+        await temp_msg.delete()
         if message.text == "Главное меню":
             await message.answer("Выберите пункт меню:", reply_markup=kb.inline_main)
         else:
@@ -206,11 +216,11 @@ async def continue_ai_conversation(message: Message, state: FSMContext):
     try:
         data = await state.get_data()
         conversation_history = data.get('conversation_history', [])
-        # Append user message to conversation history
+        # Добавляем сообщение пользователя в историю
         conversation_history.append({"role": "user", "content": message.text})
 
         response = await ai_generate(conversation_history)
-        # Append AI response to conversation history
+        # Добавляем ответ нейросети в историю
         conversation_history.append({"role": "assistant", "content": response})
         await state.update_data(conversation_history=conversation_history)
 

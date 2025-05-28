@@ -8,7 +8,7 @@ inline_main = InlineKeyboardMarkup(inline_keyboard=[
     [InlineKeyboardButton(text='Мои напоминания', callback_data='view_reminders')],
     [InlineKeyboardButton(text='Контакты', callback_data='contact')],
     [InlineKeyboardButton(text='Обратная связь', callback_data='feedback')],
-    [InlineKeyboardButton(text='Запрос нейросети', callback_data='ai_req')],
+    [InlineKeyboardButton(text='ИИ-помощник', callback_data='ai_req')],
 ])
 
 get_number = ReplyKeyboardMarkup(keyboard=[[KeyboardButton(text='Отправить номер',
