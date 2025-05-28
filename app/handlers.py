@@ -13,10 +13,10 @@ import app.database.requests as rq
 from app.generate import ai_generate
 from datetime import datetime, timedelta
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-'''import logging
+import logging
 
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)'''
+logger = logging.getLogger(__name__)
 
 router = Router()
 
@@ -113,24 +113,41 @@ async def task(callback: CallbackQuery):
 async def return_back(callback: CallbackQuery, state: FSMContext):
     current_state = await state.get_state()
 
-    if current_state == Gen.wait:
-        await state.clear()
-        await callback.message.edit_text('Выберите пункт меню', reply_markup=kb.inline_main)
-    elif current_state in [TaskActions.adding, TaskActions.reminder_time, TaskActions.edit_reminder, Gen.conversation]:
-        await state.clear()
-        tasks = await rq.get_tasks(callback.from_user.id)
-        keyboard = await kb.my_task_kb(callback.from_user.id)
+    try:
+        if current_state == Gen.wait:
+            await state.clear()
+            # Check if message content needs updating
+            if callback.message.text != 'Выберите пункт меню' or callback.message.reply_markup != kb.inline_main:
+                await callback.message.edit_text('Выберите пункт меню', reply_markup=kb.inline_main)
+        elif current_state in [TaskActions.adding, TaskActions.reminder_time, TaskActions.edit_reminder,
+                               Gen.conversation]:
+            await state.clear()
+            tasks = await rq.get_tasks(callback.from_user.id)
+            keyboard = await kb.my_task_kb(callback.from_user.id)
+            text = "📭 Список задач пуст" if not tasks else "📋 Ваши текущие задачи:\n\n" + "\n".join(
+                f"▫️ {task.task}" for task in tasks) + "\n\nВыберите действие:"
 
-        text = "📭 Список задач пуст" if not tasks else "📋 Ваши текущие задачи:\n\n" + "\n".join(
-            f"▫️ {task.task}" for task in tasks)
-        await callback.message.edit_text(
-            f"{text}\n\nВыберите действие:",
-            reply_markup=keyboard
+            # Check if message content needs updating
+            if callback.message.text != text or callback.message.reply_markup != keyboard:
+                await callback.message.edit_text(text, reply_markup=keyboard)
+        else:
+            # Default to main menu
+            if callback.message.text != 'Выберите пункт меню' or callback.message.reply_markup != kb.inline_main:
+                await callback.message.edit_text('Выберите пункт меню', reply_markup=kb.inline_main)
+
+        try:
+            await callback.answer()  # Dismiss button loading animation
+        except TelegramBadRequest as e:
+            logger.warning(f"Failed to answer callback query: {e}")
+
+    except TelegramBadRequest as e:
+        logger.error(f"Failed to edit message in return_back: {e}")
+        # Fallback to sending a new message
+        await callback.message.answer(
+            "⚠️ Не удалось обновить сообщение. Выберите пункт меню:",
+            reply_markup=kb.inline_main
         )
-    else:
-        await callback.message.edit_text('Выберите пункт меню', reply_markup=kb.inline_main)
-
-    await callback.answer()
+        await state.clear()
 
 
 @router.message(F.text == "Главное меню")

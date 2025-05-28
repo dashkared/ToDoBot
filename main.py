@@ -1,8 +1,13 @@
 import os
 import asyncio
 from aiogram import Bot, Dispatcher
+from aiogram.fsm.storage.memory import MemoryStorage
+import logging
 from dotenv import load_dotenv
 from app.database.models import async_main
+from app.middlewares import BlockUserMiddleware
+
+logging.basicConfig(level=logging.INFO)
 
 async def main():
     load_dotenv()
@@ -10,6 +15,7 @@ async def main():
     bot = Bot(token=os.getenv('TG_TOKEN'))
     dp = Dispatcher()
     print('Бот запущен')
+    dp.update.outer_middleware(BlockUserMiddleware())
     # Импорт обработчиков
     from app.handlers import router
     from app.admin import admin
