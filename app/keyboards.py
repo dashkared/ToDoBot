@@ -77,7 +77,7 @@ async def delete_tasks(tg_id, page=0):
     # Добавление списка задач на свою отдельную строку
     for task in paginated_tasks: # Перебор задач на текущей странице
         keyboard.row(InlineKeyboardButton(
-            text=f"❌ {task.task}",
+            text= f"❌ {task.task}",
             callback_data=f'delete_{task.id}')) # Добавление кнопки для удаления каждой задачи с её ID
 
     # Вычисление общего количества страниц
