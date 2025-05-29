@@ -29,7 +29,7 @@ You also need a Telegram bot token, which can be obtained from [BotFather](https
 
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/your-username/todo-bot.git
+   git clone https://github.com/dashkared/ToDoBot.git
    cd todo-bot
    ```
 
