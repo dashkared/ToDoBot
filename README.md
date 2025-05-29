@@ -77,10 +77,8 @@ The bot supports inline buttons for managing tasks, reminders, and interacting w
 To clone the repository to your local machine:
 
 ```bash
-git clone https://github.com/your-username/todo-bot.git
+git clone https://github.com/dashkared/ToDoBot.git
 ```
-
-Replace `your-username` with your GitHub username. After cloning, follow the instructions in the **Installation** section.
 
 ## Contact
 
